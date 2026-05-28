@@ -18,27 +18,27 @@ const int BUF_SIZE = 8192;
 SOCKET sock;
 bool running = true;
 
-// ─── Поток приёма сообщений от сервера ───────────────────────────────────────
+// ─── Receive messages from server ────────────────────────────────────────────
 void receive_loop() {
     char buffer[BUF_SIZE];
     while (running) {
         int bytes = recv(sock, buffer, BUF_SIZE - 1, 0);
         if (bytes <= 0) {
-            cout << "\n[Соединение разорвано]\n";
+            cout << "\n[Connection lost]\n";
             running = false;
             break;
         }
         buffer[bytes] = '\0';
-        // Печатаем сообщение с новой строки, чтобы не сбивать ввод
+        // Print on a new line so it doesn't interrupt user input
         cout << "\r" << string(buffer, bytes) << "\n> " << flush;
     }
 }
 
-// ─── Отправка файла ───────────────────────────────────────────────────────────
+// ─── Send a file to the server ────────────────────────────────────────────────
 void send_file(const string& local_path) {
     ifstream file(local_path, ios::binary | ios::ate);
     if (!file.is_open()) {
-        cout << "Ошибка: не удаётся открыть файл " << local_path << "\n";
+        cout << "Error: cannot open file " << local_path << "\n";
         return;
     }
 
@@ -46,7 +46,7 @@ void send_file(const string& local_path) {
     file.seekg(0);
 
     string filename = filesystem::path(local_path).filename().string();
-    // Заголовок: send_file <имя> <размер>\n
+    // Header: send_file <name> <size>\n
     string header = "send_file " + filename + " " + to_string(file_size) + "\n";
     send(sock, header.c_str(), (int)header.size(), 0);
 
@@ -58,23 +58,20 @@ void send_file(const string& local_path) {
             send(sock, buffer, bytes, 0);
     }
     file.close();
-    cout << "[Файл '" << filename << "' отправлен]\n";
+    cout << "[File '" << filename << "' sent]\n";
 }
 
-// ─── Главная функция ──────────────────────────────────────────────────────────
+// ─── Entry point ──────────────────────────────────────────────────────────────
 int main() {
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
-
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-        cout << "Ошибка инициализации Winsock!\n";
+        cout << "Winsock initialization error!\n";
         return 1;
     }
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == INVALID_SOCKET) {
-        cout << "Ошибка создания сокета: " << WSAGetLastError() << "\n";
+        cout << "Socket creation error: " << WSAGetLastError() << "\n";
         WSACleanup();
         return 1;
     }
@@ -84,52 +81,52 @@ int main() {
     server_addr.sin_port = htons(PORT);
 
     string server_ip;
-    cout << "Введите IP сервера (Enter = 127.0.0.1): ";
+    cout << "Enter server IP (Enter = 127.0.0.1): ";
     getline(cin, server_ip);
     if (server_ip.empty()) server_ip = "127.0.0.1";
 
     if (inet_pton(AF_INET, server_ip.c_str(), &server_addr.sin_addr) <= 0) {
-        cout << "Ошибка: неверный формат IP!\n";
+        cout << "Error: invalid IP format!\n";
         closesocket(sock);
         WSACleanup();
         return 1;
     }
 
-    cout << "Подключение к " << server_ip << ":" << PORT << " ...\n";
+    cout << "Connecting to " << server_ip << ":" << PORT << " ...\n";
 
     if (connect(sock, (sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
         int err = WSAGetLastError();
-        cout << "Ошибка подключения! Код: " << err << "\n";
-        if (err == 10061) cout << "  Сервер не запущен или порт 8080 закрыт\n";
-        else if (err == 10060) cout << "  Таймаут. Проверьте firewall и IP\n";
-        else if (err == 10049) cout << "  Неверный адрес\n";
+        cout << "Connection error! Code: " << err << "\n";
+        if (err == 10061) cout << "  Server is not running or port 8080 is closed\n";
+        else if (err == 10060) cout << "  Timeout. Check firewall and IP address\n";
+        else if (err == 10049) cout << "  Invalid address\n";
         closesocket(sock);
         WSACleanup();
         system("pause");
         return 1;
     }
 
-    cout << "✅ Успешное подключение!\n";
+    cout << "Connected successfully!\n";
 
-    // Запрос имени пользователя
+    // Ask for username
     string username;
-    cout << "Введите ваш ник: ";
+    cout << "Enter your username: ";
     getline(cin, username);
-    if (username.empty()) username = "Аноним";
+    if (username.empty()) username = "Anonymous";
 
-    // Сообщаем серверу своё имя
+    // Send username to server
     string name_cmd = "set_name " + username;
     send(sock, name_cmd.c_str(), (int)name_cmd.size(), 0);
 
-    cout << "\n--- Чат запущен. Команды: ---\n";
-    cout << "  <текст>              — отправить сообщение\n";
-    cout << "  send_file <путь>     — отправить файл\n";
-    cout << "  count_spaces <файл>  — посчитать пробелы в файле на сервере\n";
-    cout << "  get_file <файл>      — скачать файл с сервера\n";
-    cout << "  exit                 — выйти\n";
-    cout << "-----------------------------\n\n";
+    cout << "\n--- Chat started. Commands: ---\n";
+    cout << "  <text>               - send a message\n";
+    cout << "  send_file <path>     - send a file to the server\n";
+    cout << "  count_spaces <file>  - count spaces in a server-side file\n";
+    cout << "  get_file <file>      - download a file from the server\n";
+    cout << "  exit                 - quit\n";
+    cout << "-------------------------------\n\n";
 
-    // Запускаем поток чтения сообщений от сервера
+    // Start receiving messages from server
     thread(receive_loop).detach();
 
     string line;
@@ -147,15 +144,15 @@ int main() {
         }
         else if (line.substr(0, 13) == "count_spaces " ||
             line.substr(0, 9) == "get_file ") {
-            // Служебные команды — отправляем напрямую
+            // Service commands — send directly
             send(sock, line.c_str(), (int)line.size(), 0);
         }
         else {
-            // Обычное сообщение — добавляем префикс msg
+            // Regular message — add msg prefix
             string msg = "msg " + line;
             send(sock, msg.c_str(), (int)msg.size(), 0);
-            // Локальное эхо: показываем своё сообщение сразу
-            cout << "\r[Вы]: " << line << "\n";
+            // Local echo: show own message immediately
+            cout << "\r[You]: " << line << "\n";
         }
     }
 
