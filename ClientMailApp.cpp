@@ -18,7 +18,6 @@ const int BUF_SIZE = 8192;
 SOCKET sock;
 bool running = true;
 
-// ─── Receive messages from server ────────────────────────────────────────────
 void receive_loop() {
     char buffer[BUF_SIZE];
     while (running) {
@@ -29,12 +28,10 @@ void receive_loop() {
             break;
         }
         buffer[bytes] = '\0';
-        // Print on a new line so it doesn't interrupt user input
         cout << "\r" << string(buffer, bytes) << "\n> " << flush;
     }
 }
 
-// ─── Send a file to the server ────────────────────────────────────────────────
 void send_file(const string& local_path) {
     ifstream file(local_path, ios::binary | ios::ate);
     if (!file.is_open()) {
@@ -46,7 +43,6 @@ void send_file(const string& local_path) {
     file.seekg(0);
 
     string filename = filesystem::path(local_path).filename().string();
-    // Header: send_file <name> <size>\n
     string header = "send_file " + filename + " " + to_string(file_size) + "\n";
     send(sock, header.c_str(), (int)header.size(), 0);
 
@@ -61,7 +57,6 @@ void send_file(const string& local_path) {
     cout << "[File '" << filename << "' sent]\n";
 }
 
-// ─── Entry point ──────────────────────────────────────────────────────────────
 int main() {
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
@@ -108,13 +103,11 @@ int main() {
 
     cout << "Connected successfully!\n";
 
-    // Ask for username
     string username;
     cout << "Enter your username: ";
     getline(cin, username);
     if (username.empty()) username = "Anonymous";
 
-    // Send username to server
     string name_cmd = "set_name " + username;
     send(sock, name_cmd.c_str(), (int)name_cmd.size(), 0);
 
@@ -126,7 +119,6 @@ int main() {
     cout << "  exit                 - quit\n";
     cout << "-------------------------------\n\n";
 
-    // Start receiving messages from server
     thread(receive_loop).detach();
 
     string line;
@@ -144,14 +136,11 @@ int main() {
         }
         else if (line.substr(0, 13) == "count_spaces " ||
             line.substr(0, 9) == "get_file ") {
-            // Service commands — send directly
             send(sock, line.c_str(), (int)line.size(), 0);
         }
         else {
-            // Regular message — add msg prefix
             string msg = "msg " + line;
             send(sock, msg.c_str(), (int)msg.size(), 0);
-            // Local echo: show own message immediately
             cout << "\r[You]: " << line << "\n";
         }
     }
